@@ -1,0 +1,132 @@
+/* Palette copied from @frekuent/orbit (src/styles/variables/colors.css) so the
+   showroom matches the brand without pulling in Orbit's dashboard components. */
+:root {
+  --purple-dark: #27225c;
+  --purple-medium: #673fff;
+  --ink: #2e2f33;
+  --grey-dark: #767676;
+  --grey-medium: #c2c4ca;
+  --nude-light: #f9f4ef;
+}
+
+@font-face {
+  font-family: 'Greed Standard';
+  src: url('../assets/fonts/Greed-Standard-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Greed Standard';
+  src: url('../assets/fonts/Greed-Standard-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: block;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--purple-dark);
+}
+
+body {
+  font-family: 'Greed Standard', system-ui, sans-serif;
+  /* Kiosk: no text selection, callouts or double-tap zoom on the touch screen. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Layout helpers: the rest of the styling is inline, in stage pixels. */
+.abs {
+  position: absolute;
+}
+.fill {
+  position: absolute;
+  inset: 0;
+}
+.row {
+  display: flex;
+  align-items: center;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+}
+.center {
+  align-items: center;
+  justify-content: center;
+}
+.between {
+  justify-content: space-between;
+}
+
+.key:active {
+  filter: brightness(1.25);
+}
+
+/* Animations only touch transform and opacity, which the GPU composites. */
+.fade-in {
+  animation: fade-in 300ms ease-out;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Product falling into the tray, with a small bounce on landing. */
+.drop {
+  animation: drop 700ms ease-in forwards;
+}
+@keyframes drop {
+  0% {
+    transform: translateY(var(--drop-from)) rotate(-8deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+    animation-timing-function: ease-out;
+  }
+  75% {
+    transform: translateY(calc(var(--drop-from) * -0.08)) rotate(1deg);
+    animation-timing-function: ease-in;
+  }
+  100% {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+}

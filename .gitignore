@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+dist-ssr/
+*.tsbuildinfo
+.vite/
+
+# Tests
+coverage/
+
+# Env (solo se versiona la plantilla)
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Android (el detalle está en android/.gitignore)
+*.jks
+*.keystore
+*.apk
+*.aab
+
+# Editores
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.suo
+*.sln
+*.sw?
+
+# Claude Code
+.claude/
+
+# CodeGraph
+.codegraph/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
