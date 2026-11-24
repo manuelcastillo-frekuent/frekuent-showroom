@@ -8,12 +8,14 @@ import { Spiral } from './Spiral';
 interface ProductSlotProps {
   product: Product;
   selected: boolean;
-  /** The product has left the spiral and is falling into the tray. */
+  /** The product has left the slot: the flight over the cabinet draws it now. */
   dropped: boolean;
+  /** The spiral is screwing the product out. */
+  turning: boolean;
 }
 
 /** One spiral behind the glass: product, spiral, code tag and price. */
-export function ProductSlot({ product, selected, dropped }: ProductSlotProps) {
+export function ProductSlot({ product, selected, dropped, turning }: ProductSlotProps) {
   const price = product.soldOut ? 'Sold out' : formatCents(product.priceCents);
   return (
     <div
@@ -31,8 +33,8 @@ export function ProductSlot({ product, selected, dropped }: ProductSlotProps) {
         border: `${u(2)}px solid ${selected ? C.lilac : 'transparent'}`,
       }}
     >
-      <ProductShape product={product} hidden={dropped} />
-      <Spiral />
+      <ProductShape product={product} hidden={dropped} anchor={`slot-${product.code}`} />
+      <Spiral turning={turning} />
       <span
         className="row between"
         style={{ width: '100%', padding: `0 ${u(3)}px`, fontSize: u(10), color: '#fff' }}

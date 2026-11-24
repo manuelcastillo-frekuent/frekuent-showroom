@@ -1,18 +1,20 @@
-import type { CSSProperties } from 'react';
 import { box, u } from '@/shared/stage/scene';
 import type { Product } from '../domain/products';
 import { C } from './palette';
 import { ProductShape } from './ProductShape';
 
 interface PickupTrayProps {
-  /** Product falling into the tray; null when there is nothing to deliver. */
+  /** Product on its way to the tray or already in it; null when there is nothing to deliver. */
   item: Product | null;
   delivered: boolean;
-  onDropEnd: () => void;
   onTake: () => void;
 }
 
-export function PickupTray({ item, delivered, onDropEnd, onTake }: PickupTrayProps) {
+/**
+ * Pickup tray. While the item is still falling it keeps an invisible copy where it
+ * will rest, which `DispenseFlight` aims at; on delivery that copy is shown.
+ */
+export function PickupTray({ item, delivered, onTake }: PickupTrayProps) {
   return (
     <div
       style={{
@@ -35,23 +37,19 @@ export function PickupTray({ item, delivered, onDropEnd, onTake }: PickupTrayPro
       >
         Pickup
       </div>
+      {/* Opening under the flap: the only part of the tray a falling product shows through. */}
+      <div
+        data-anchor="tray-window"
+        className="abs"
+        style={{ left: 0, right: 0, top: u(24), bottom: 0, pointerEvents: 'none' }}
+      />
       {item && (
         <>
           <div
-            key={item.code}
-            className="abs row drop"
-            style={
-              {
-                left: 0,
-                right: 0,
-                bottom: u(12),
-                justifyContent: 'center',
-                '--drop-from': `${-u(120)}px`,
-              } as CSSProperties
-            }
-            onAnimationEnd={onDropEnd}
+            className="abs row"
+            style={{ left: 0, right: 0, bottom: u(12), justifyContent: 'center' }}
           >
-            <ProductShape product={item} />
+            <ProductShape product={item} hidden={!delivered} anchor="tray" />
           </div>
           {delivered && (
             <button

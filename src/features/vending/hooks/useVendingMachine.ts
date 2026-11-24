@@ -20,6 +20,7 @@ export function useVendingMachine() {
     state.status === 'idle' ? null : (findProduct(state.request.productCode) ?? null);
   const dropping =
     selected !== null && (state.status === 'dispensing' || state.status === 'delivered');
+  const dispensing = selected !== null && state.status === 'dispensing';
   const waitingTap = state.status === 'waiting_tap';
 
   const clear = () => {
@@ -87,6 +88,7 @@ export function useVendingMachine() {
     error,
     selected,
     dropping,
+    dispensing,
     waitingTap,
     canSimulateTap,
     press,

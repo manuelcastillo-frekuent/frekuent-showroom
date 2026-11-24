@@ -27,6 +27,20 @@ function shapeStyle(product: Product): CSSProperties {
 }
 
 /** Flat drawing of a product (bottle, can, bag…) in its own colour. */
-export function ProductShape({ product, hidden = false }: { product: Product; hidden?: boolean }) {
-  return <span style={{ ...shapeStyle(product), visibility: hidden ? 'hidden' : 'visible' }} />;
+export function ProductShape({
+  product,
+  hidden = false,
+  anchor,
+}: {
+  product: Product;
+  hidden?: boolean;
+  /** Lets the dispense flight find where this drawing sits (`data-anchor`). */
+  anchor?: string;
+}) {
+  return (
+    <span
+      data-anchor={anchor}
+      style={{ ...shapeStyle(product), visibility: hidden ? 'hidden' : 'visible' }}
+    />
+  );
 }
