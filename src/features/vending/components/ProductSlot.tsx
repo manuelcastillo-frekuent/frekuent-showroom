@@ -1,6 +1,7 @@
 import { formatCents } from '@/shared/utils/format';
 import { u } from '@/shared/stage/scene';
 import type { Product } from '../domain/products';
+import { JAM_MS } from './dispenseTiming';
 import { C } from './palette';
 import { ProductShape } from './ProductShape';
 import { Spiral } from './Spiral';
@@ -12,10 +13,20 @@ interface ProductSlotProps {
   dropped: boolean;
   /** The spiral is screwing the product out. */
   turning: boolean;
+  /** Forced failed delivery: the product sticks at the edge of the slot and never falls. */
+  jammed: boolean;
+  onJamEnd: () => void;
 }
 
 /** One spiral behind the glass: product, spiral, code tag and price. */
-export function ProductSlot({ product, selected, dropped, turning }: ProductSlotProps) {
+export function ProductSlot({
+  product,
+  selected,
+  dropped,
+  turning,
+  jammed,
+  onJamEnd,
+}: ProductSlotProps) {
   const price = product.soldOut ? 'Sold out' : formatCents(product.priceCents);
   return (
     <div
@@ -33,7 +44,17 @@ export function ProductSlot({ product, selected, dropped, turning }: ProductSlot
         border: `${u(2)}px solid ${selected ? C.lilac : 'transparent'}`,
       }}
     >
-      <ProductShape product={product} hidden={dropped} anchor={`slot-${product.code}`} />
+      {jammed ? (
+        <span
+          className="jam"
+          style={{ display: 'block', animationDuration: `${JAM_MS}ms` }}
+          onAnimationEnd={onJamEnd}
+        >
+          <ProductShape product={product} />
+        </span>
+      ) : (
+        <ProductShape product={product} hidden={dropped} anchor={`slot-${product.code}`} />
+      )}
       <Spiral turning={turning} />
       <span
         className="row between"

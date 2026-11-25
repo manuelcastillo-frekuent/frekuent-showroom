@@ -118,3 +118,33 @@ button {
     transform: translateX(12px);
   }
 }
+
+/* Forced failed delivery: the spiral pushes the product to the edge of its slot,
+   where it teeters and stays stuck instead of falling. Duration from dispenseTiming.ts
+   (JAM_MS); the spiral turns for the first SPIRAL_MS of it. */
+.jam {
+  animation-name: jam;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+  transform-origin: 50% 100%;
+}
+@keyframes jam {
+  0% {
+    transform: scale(1) rotate(0);
+  }
+  57% {
+    transform: scale(1.12) rotate(0);
+  }
+  68% {
+    transform: scale(1.16) rotate(-7deg);
+  }
+  78% {
+    transform: scale(1.16) rotate(5deg);
+  }
+  88% {
+    transform: scale(1.15) rotate(-4deg);
+  }
+  100% {
+    transform: scale(1.14) rotate(-3deg);
+  }
+}

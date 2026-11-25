@@ -19,7 +19,9 @@ pnpm dev          # http://localhost:5180
 ## Modos
 
 - **demo** (por defecto): pagos simulados en el propio navegador (`MockGateway`). En vending se paga tocando el hueco del Spot Pro ("Tap here (demo)"). Es el modo seguro para ferias sin red.
-- **s2s**: pagos por WebSocket con el servidor del showroom (`WsGateway`), que habla con payments-api y el firmware del Spot. El servidor envía los cambios de estado y la **orden de dispensar**; la pantalla anima la entrega y confirma con `dispense_result`. Protocolo provisional en [docs/ws-protocol.md](docs/ws-protocol.md).
+- **s2s**: pagos reales, sin BFF (`S2sGateway`). La pantalla abre la venta con un `POST` al servicio de pagos y consulta su estado por polling. La **orden de dispensar**, que trae también la aprobación, llega por el canal de la máquina (WebSocket, quizá MQTT). Por ese mismo canal la pantalla confirma la entrega con `dispense_result`. Protocolo provisional en [docs/s2s-protocol.md](docs/s2s-protocol.md).
+
+En los dos modos, el botón **«Fail next delivery»** (a la derecha de la máquina) hace que la siguiente entrega se atasque y que se envíe `dispense_result=false` para probar el reembolso.
 
 Probar el modo s2s en local:
 
@@ -28,9 +30,9 @@ cd ../showroom-bff && pnpm start   # terminal 1 → panel en http://localhost:87
 pnpm dev                           # terminal 2 → http://localhost:5180/?mode=s2s
 ```
 
-El BFF simulado vive fuera de este repo, en [`../showroom-bff`](../showroom-bff). Hace de BFF, payments-api, firmware y APK, y de momento solo simula un cobro correcto. En su panel tú eres el visitante delante del Spot.
+El simulador vive fuera de este repo, en [`../showroom-bff`](../showroom-bff). Mientras no haya endpoints definitivos, hace de servicio de pagos (HTTP), canal de la máquina, firmware y APK. En su panel tú eres el visitante delante del Spot.
 
-Parámetros de URL útiles en el kiosco: `?mode=demo|s2s`, `?ws=wss://…`, `?scale=1|0.76`.
+Parámetros de URL útiles en el kiosco: `?mode=demo|s2s`, `?api=https://…`, `?ws=wss://…`, `?scale=1|0.76`.
 
 ## Estructura
 
@@ -42,7 +44,7 @@ src/
 ├─ features/
 │  ├─ payments/              Un único pago en curso, compartido por todos los escenarios
 │  │  ├─ domain/             types.ts, machine.ts (máquina de estados pura)
-│  │  ├─ api/                gateway.ts (elige mock o s2s), mock/, s2s/ (WebSocket + protocolo)
+│  │  ├─ api/                gateway.ts (elige mock o s2s), mock/, s2s/ (HTTP + canal de la máquina + protocolo)
 │  │  ├─ store/              paymentStore.ts (estado + acciones)
 │  │  ├─ hooks/              usePayment
 │  │  └─ index.ts            API pública
@@ -75,4 +77,5 @@ La pantalla del tótem tiene una GPU modesta y puede que su WebView no se actual
 ## Despliegue
 
 `Dockerfile` (build estática + nginx). La pantalla Android abre la URL en un navegador en modo kiosco.
+
 # frekuent-showroom

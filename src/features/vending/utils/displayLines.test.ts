@@ -31,6 +31,18 @@ describe('displayLines', () => {
     const state: PaymentState = { status: 'failed', request, reason: 'timeout' };
     expect(displayLines(state, '', null)).toEqual(['Timed out', 'Try again']);
   });
+
+  it('tells a failed delivery in two messages: not delivered, then refunded', () => {
+    const state: PaymentState = {
+      status: 'undelivered',
+      request,
+      paymentId: 'p1',
+      authCode: 'A1',
+      method: 'card',
+    };
+    expect(displayLines(state, '', null)).toEqual(['Not delivered', '']);
+    expect(displayLines(state, '', null, true)).toEqual(['Refund issued', '']);
+  });
 });
 
 describe('shownCode', () => {

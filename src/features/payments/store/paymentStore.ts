@@ -53,7 +53,7 @@ export const paymentActions = {
   async finishDispense(success = true) {
     if (state.status !== 'dispensing') return;
     const { paymentId } = state;
-    dispatch({ type: 'DISPENSE_DONE' });
+    dispatch({ type: 'DISPENSE_DONE', success });
     await gateway.confirmDispense(paymentId, success).catch(() => undefined);
   },
 

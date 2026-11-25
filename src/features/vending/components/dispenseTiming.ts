@@ -10,3 +10,6 @@ export const ZOOM_MS = 400;
 export const FALL_MS = 900;
 export const LAND_MS = 400;
 export const DISPENSE_MS = SPIRAL_MS + ZOOM_MS + FALL_MS + LAND_MS;
+
+/** Forced failed delivery: the spiral turns as usual, then the product teeters and sticks. */
+export const JAM_MS = SPIRAL_MS + 900;

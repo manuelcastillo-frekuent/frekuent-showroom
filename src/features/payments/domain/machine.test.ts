@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   initialPaymentState,
+  isBusy,
   paymentReducer,
   type PaymentAction,
   type PaymentState,
@@ -25,12 +26,37 @@ describe('paymentReducer', () => {
       { type: 'EVENT', event: { type: 'authorising', paymentId: 'p1' } },
       {
         type: 'EVENT',
-        event: { type: 'approved', paymentId: 'p1', authCode: 'A1', method: 'card' },
+        event: {
+          type: 'dispense',
+          paymentId: 'p1',
+          productCode: '21',
+          authCode: 'A1',
+          method: 'card',
+        },
       },
-      { type: 'EVENT', event: { type: 'dispense', paymentId: 'p1', productCode: '21' } },
-      { type: 'DISPENSE_DONE' },
+      { type: 'DISPENSE_DONE', success: true },
     );
     expect(state).toMatchObject({ status: 'delivered', paymentId: 'p1', authCode: 'A1' });
+  });
+
+  it('ends a failed delivery as undelivered, a final state', () => {
+    const state = run(
+      { type: 'REQUEST', request },
+      { type: 'STARTED', paymentId: 'p1' },
+      {
+        type: 'EVENT',
+        event: {
+          type: 'dispense',
+          paymentId: 'p1',
+          productCode: '21',
+          authCode: 'A1',
+          method: 'card',
+        },
+      },
+      { type: 'DISPENSE_DONE', success: false },
+    );
+    expect(state).toMatchObject({ status: 'undelivered', authCode: 'A1' });
+    expect(isBusy(state)).toBe(false);
   });
 
   it('ignores events for another payment', () => {
@@ -39,7 +65,13 @@ describe('paymentReducer', () => {
       { type: 'STARTED', paymentId: 'p1' },
       {
         type: 'EVENT',
-        event: { type: 'approved', paymentId: 'other', authCode: 'X', method: 'card' },
+        event: {
+          type: 'dispense',
+          paymentId: 'other',
+          productCode: '21',
+          authCode: 'X',
+          method: 'card',
+        },
       },
     );
     expect(state.status).toBe('waiting_tap');
@@ -52,7 +84,13 @@ describe('paymentReducer', () => {
       { type: 'EVENT', event: { type: 'failed', paymentId: 'p1', reason: 'cancelled' } },
       {
         type: 'EVENT',
-        event: { type: 'approved', paymentId: 'p1', authCode: 'A', method: 'card' },
+        event: {
+          type: 'dispense',
+          paymentId: 'p1',
+          productCode: '21',
+          authCode: 'A1',
+          method: 'card',
+        },
       },
     );
     expect(state).toMatchObject({ status: 'failed', reason: 'cancelled' });
@@ -67,19 +105,15 @@ describe('paymentReducer', () => {
 });
 
 describe('MockGateway', () => {
-  it('approves after a simulated tap', async () => {
+  it('sends approval and dispense order together after a simulated tap', async () => {
     vi.useFakeTimers();
     const events: PaymentEvent[] = [];
     const gw = new MockGateway({ authoriseMs: 100 });
     const id = await gw.start(request, (e) => events.push(e));
     gw.simulateTap(id, 'wallet');
     vi.advanceTimersByTime(100);
-    expect(events.map((e) => e.type)).toEqual([
-      'waiting_tap',
-      'authorising',
-      'approved',
-      'dispense',
-    ]);
+    expect(events.map((e) => e.type)).toEqual(['waiting_tap', 'authorising', 'dispense']);
+    expect(events.at(-1)).toMatchObject({ productCode: '21', method: 'wallet' });
     vi.useRealTimers();
   });
 

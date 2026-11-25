@@ -8,10 +8,20 @@ interface ProductGlassProps {
   selectedCode: string | null;
   dropping: boolean;
   dispensing: boolean;
+  /** The selected product sticks on its spiral (forced failed delivery). */
+  jamming: boolean;
+  onJamEnd: () => void;
 }
 
 /** Glass front with the 6 × 3 grid of spirals. */
-export function ProductGlass({ products, selectedCode, dropping, dispensing }: ProductGlassProps) {
+export function ProductGlass({
+  products,
+  selectedCode,
+  dropping,
+  dispensing,
+  jamming,
+  onJamEnd,
+}: ProductGlassProps) {
   return (
     <div
       data-anchor="glass"
@@ -36,6 +46,8 @@ export function ProductGlass({ products, selectedCode, dropping, dispensing }: P
             selected={selected}
             dropped={selected && dropping}
             turning={selected && dispensing}
+            jammed={selected && jamming}
+            onJamEnd={onJamEnd}
           />
         );
       })}

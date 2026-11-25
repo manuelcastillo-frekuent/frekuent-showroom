@@ -2,18 +2,20 @@ import type { PaymentEvent, PaymentRequest } from './types';
 
 export type FailReason = Extract<PaymentEvent, { type: 'failed' }>['reason'];
 
+interface Approved {
+  request: PaymentRequest;
+  paymentId: string;
+  authCode: string;
+  method: 'card' | 'wallet';
+}
+
 export type PaymentState =
   | { status: 'idle' }
   | { status: 'requesting'; request: PaymentRequest }
   | { status: 'waiting_tap'; request: PaymentRequest; paymentId: string }
   | { status: 'authorising'; request: PaymentRequest; paymentId: string }
-  | {
-      status: 'approved' | 'dispensing' | 'delivered';
-      request: PaymentRequest;
-      paymentId: string;
-      authCode: string;
-      method: 'card' | 'wallet';
-    }
+  /** `undelivered`: the delivery failed; the backend refunds once told so. */
+  | ({ status: 'dispensing' | 'delivered' | 'undelivered' } & Approved)
   | { status: 'failed'; request: PaymentRequest; paymentId?: string; reason: FailReason };
 
 export type PaymentAction =
@@ -21,7 +23,7 @@ export type PaymentAction =
   | { type: 'STARTED'; paymentId: string }
   | { type: 'EVENT'; event: PaymentEvent }
   | { type: 'START_FAILED' }
-  | { type: 'DISPENSE_DONE' }
+  | { type: 'DISPENSE_DONE'; success: boolean }
   | { type: 'RESET' };
 
 export const initialPaymentState: PaymentState = { status: 'idle' };
@@ -50,9 +52,10 @@ export function paymentReducer(state: PaymentState, action: PaymentAction): Paym
       if (action.type !== 'EVENT' || action.event.paymentId !== state.paymentId) return state;
       const event = action.event;
       if (event.type === 'authorising') return { ...state, status: 'authorising' };
-      if (event.type === 'approved')
+      // Approval and the order to dispense arrive together.
+      if (event.type === 'dispense')
         return {
-          status: 'approved',
+          status: 'dispensing',
           request: state.request,
           paymentId: state.paymentId,
           authCode: event.authCode,
@@ -68,22 +71,20 @@ export function paymentReducer(state: PaymentState, action: PaymentAction): Paym
       return state;
     }
 
-    case 'approved':
-      // Delivery starts only on the server's order, never on approval alone.
-      return action.type === 'EVENT' &&
-        action.event.type === 'dispense' &&
-        action.event.paymentId === state.paymentId
-        ? { ...state, status: 'dispensing' }
-        : state;
-
     case 'dispensing':
-      return action.type === 'DISPENSE_DONE' ? { ...state, status: 'delivered' } : state;
+      if (action.type !== 'DISPENSE_DONE') return state;
+      return { ...state, status: action.success ? 'delivered' : 'undelivered' };
 
     case 'delivered':
+    case 'undelivered':
     case 'failed':
       return state;
   }
 }
 
+/** A visitor's sale is still moving; the screen must not reset under it. */
 export const isBusy = (state: PaymentState) =>
-  state.status !== 'idle' && state.status !== 'delivered' && state.status !== 'failed';
+  state.status !== 'idle' &&
+  state.status !== 'delivered' &&
+  state.status !== 'undelivered' &&
+  state.status !== 'failed';

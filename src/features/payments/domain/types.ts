@@ -12,14 +12,19 @@ export interface PaymentRequest {
 
 /**
  * What the screen reacts to for one payment, whichever gateway produced it.
- * `dispense` is the server's order to deliver: the screen never dispenses on
- * its own just because a payment was approved.
+ * `dispense` is the server's order to deliver and carries the approval with
+ * it: the screen never dispenses on its own.
  */
 export type PaymentEvent =
   | { type: 'waiting_tap'; paymentId: string }
   | { type: 'authorising'; paymentId: string }
-  | { type: 'approved'; paymentId: string; authCode: string; method: 'card' | 'wallet' }
-  | { type: 'dispense'; paymentId: string; productCode: string }
+  | {
+      type: 'dispense';
+      paymentId: string;
+      productCode: string;
+      authCode: string;
+      method: 'card' | 'wallet';
+    }
   | {
       type: 'failed';
       paymentId: string;
@@ -28,9 +33,13 @@ export type PaymentEvent =
 
 export interface PaymentGateway {
   readonly kind: 'mock' | 's2s';
-  /** Sends the sale request for the Spot and streams that payment's events. */
+  /** Opens the sale on the Spot and reports that payment's events. */
   start(request: PaymentRequest, onEvent: (event: PaymentEvent) => void): Promise<string>;
   cancel(paymentId: string): Promise<void>;
-  /** Tells the server the product was delivered, once the drop animation ends. */
+  /**
+   * Reports how the delivery went once its animation ends. This closes the
+   * cycle: with `false` the backend refunds on its own and the screen does not
+   * follow the payment any further.
+   */
   confirmDispense(paymentId: string, success: boolean): Promise<void>;
 }

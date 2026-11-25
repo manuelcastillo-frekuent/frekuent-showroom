@@ -1,6 +1,6 @@
 # Showroom — Agent Instructions
 
-Pantalla del tótem del showroom. Contexto en [README.md](README.md) y [PLAN.md](PLAN.md); protocolo WebSocket en [docs/ws-protocol.md](docs/ws-protocol.md).
+Pantalla del tótem del showroom. Contexto en [README.md](README.md) y [PLAN.md](PLAN.md); protocolo con los servicios (HTTP + canal de la máquina, sin BFF) en [docs/s2s-protocol.md](docs/s2s-protocol.md).
 
 ```bash
 pnpm dev | pnpm typecheck | pnpm test | pnpm lint | pnpm format

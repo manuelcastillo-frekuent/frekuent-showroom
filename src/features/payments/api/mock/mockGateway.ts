@@ -14,7 +14,7 @@ interface OpenPayment {
 }
 
 /**
- * In-process stand-in for the S2S payment API. Used for demo mode (fairs with
+ * In-process stand-in for the payment services. Used for demo mode (fairs with
  * no network) and for building the UI before backend and firmware are ready.
  * There is no real Spot here, so the tap is triggered from the screen.
  */
@@ -49,9 +49,14 @@ export class MockGateway implements PaymentGateway {
     payment.timers = [
       setTimeout(() => {
         const authCode = Math.random().toString(16).slice(2, 8).toUpperCase();
-        this.finish(paymentId, { type: 'approved', paymentId, authCode, method });
-        // Like the real server: approval first, then the order to dispense.
-        payment.onEvent({ type: 'dispense', paymentId, productCode: payment.productCode });
+        // Like the real server: approval and the dispense order in one message.
+        payment.onEvent({
+          type: 'dispense',
+          paymentId,
+          productCode: payment.productCode,
+          authCode,
+          method,
+        });
       }, this.authoriseMs),
     ];
   }
@@ -60,15 +65,16 @@ export class MockGateway implements PaymentGateway {
     this.finish(paymentId, { type: 'failed', paymentId, reason: 'cancelled' });
   }
 
-  async confirmDispense() {
-    // Nothing to settle: no money moved.
+  async confirmDispense(paymentId: string) {
+    // Nothing to settle or refund: no money moved.
+    this.finish(paymentId);
   }
 
-  private finish(paymentId: string, event: PaymentEvent) {
+  private finish(paymentId: string, event?: PaymentEvent) {
     const payment = this.open.get(paymentId);
     if (!payment) return;
     payment.timers.forEach(clearTimeout);
     this.open.delete(paymentId);
-    payment.onEvent(event);
+    if (event) payment.onEvent(event);
   }
 }

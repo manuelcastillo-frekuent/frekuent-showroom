@@ -10,11 +10,15 @@ const FAIL_SHORT: Record<FailReason, string> = {
   offline: 'Offline',
 };
 
-/** The two text lines under the code on the machine's small screen. */
+/**
+ * The two text lines under the code on the machine's small screen. A failed
+ * delivery shows two messages in turn; `refundShown` picks the second one.
+ */
 export function displayLines(
   state: PaymentState,
   code: string,
   error: string | null,
+  refundShown = false,
 ): [string, string] {
   switch (state.status) {
     case 'requesting':
@@ -22,11 +26,12 @@ export function displayLines(
       return [formatCents(state.request.amountCents), 'Pay →'];
     case 'authorising':
       return [formatCents(state.request.amountCents), 'Authorising…'];
-    case 'approved':
     case 'dispensing':
       return ['Approved', 'Dispensing…'];
     case 'delivered':
       return ['Thanks', 'Take below'];
+    case 'undelivered':
+      return refundShown ? ['Refund issued', ''] : ['Not delivered', ''];
     case 'failed':
       return [FAIL_SHORT[state.reason], 'Try again'];
     case 'idle':

@@ -47,34 +47,36 @@ Mensaje comercial del prototipo: _"Getting paid is just the beginning"_ y _"Step
 
 ## 2. Arquitectura propuesta
 
+> **Actualizado el 25/11/2026, tras hablar con Ángel:** no hay BFF. La pantalla habla directamente con el servicio de pagos (HTTP) y con el canal de la máquina (WebSocket o MQTT). Los endpoints definitivos aún no existen; hasta entonces, [`../showroom-bff`](../showroom-bff) los simula. Contrato provisional en [docs/s2s-protocol.md](docs/s2s-protocol.md).
+
 ```
 ┌──────────────────────────── Tótem ────────────────────────────┐
 │  Pantalla Android (kiosk)                                      │
 │  ┌──────────────────────────────┐                              │
-│  │ Showroom App (web, React)    │◄──── WebSocket/SSE ────┐     │
-│  │  · selector de escenario     │                        │     │
-│  │  · máquina virtual animada   │──── HTTPS (REST) ──┐   │     │
-│  └──────────────────────────────┘                    │   │     │
-│   Spot Pro · Spot Compact · Spot Mini (reales)       │   │     │
-└──────────────────────────────────────────────────────┼───┼─────┘
-                                                       ▼   │
-                                     ┌──────────────────────────┐
-                                     │ Showroom BFF (pequeño)   │  guarda credenciales,
-                                     │ /sessions, /events       │  traduce eventos → push
-                                     └────────────┬─────────────┘
-                                                  ▼
-                                     payments-api (Ángel) ◄──► Firmware Spot (Tomás)
-                                     /create /pay /dispense /rollback   UserPresent, SaleMessage,
-                                                                        SaleStatus, ProductDelivered
+│  │ Showroom App (web, React)    │── HTTPS: POST /sales ──────┐ │
+│  │  · máquina virtual animada   │── HTTPS: GET status (poll) ┤ │
+│  │  · botón «Fail next delivery»│◄─ dispense ────────────┐   │ │
+│  │                              │── dispense_result ────►│   │ │
+│  └──────────────────────────────┘                        │   │ │
+│   Spot Pro · Spot Compact · Spot Mini (reales)           │   │ │
+└──────────────────────────────────────────────────────────┼───┼─┘
+                                                           │   ▼
+                                  Canal de la máquina ◄────┘  Servicio de pagos (Ángel)
+                                  (WebSocket o MQTT)    ◄───► /dispense, reembolso
+                                                              ◄──► Firmware Spot (Tomás)
 ```
+
+### Flujo de compra y entrega
+
+1. `POST /sales`: la respuesta trae el ID del pago (sustituye a `sale_accepted`). Nombre del campo por confirmar.
+2. Polling del estado al servicio de pagos, solo para mostrar el progreso y los fallos: nadie lo envía por su cuenta.
+3. `payment_approved` y `dispense` llegan juntos, en una sola orden, por el canal de la máquina.
+4. `dispense_result` por el mismo canal, y ahí termina el ciclo de la pantalla. Con `false`, el backend reembolsa ese pago por su cuenta; la pantalla no lo consulta.
 
 ### Ideas clave
 
 1. **La pantalla es el "integrador" S2S.** Actúa como lo haría una máquina de un tercero: pide un pago para un Spot concreto, espera el resultado, anima la entrega y confirma el dispense. Por eso el showroom sirve también como **demo viva de la API S2S** que venderemos a integradores.
-2. **No poner credenciales de la payment API en el navegador del tótem.** Una pantalla en una feria es un entorno hostil. Propongo un **BFF mínimo**, que puede ser un endpoint dentro de payments-api o un servicio aparte; lo decidimos con Ángel. Ese BFF:
-   - firma las llamadas,
-   - mapea `escenario → device_id del Spot`,
-   - **empuja** los cambios de estado a la pantalla (SSE o WebSocket), para no tener que hacer polling.
+2. **Sin BFF, la credencial queda en el tótem.** Una pantalla en una feria es un entorno hostil, así que hace falta un token del showroom limitado a sus Spots. La correspondencia `spot → device_id`, que hacía el BFF, pasa a la configuración de la pantalla o al servicio. Pendiente de cerrar con Ángel.
 3. **Una sola máquina de estados de pago** compartida por los tres escenarios. Los estados salen de la spec S2S:
 
    `idle → requesting (/create + /pay) → waiting_tap → authorising → approved → dispensing → delivered (/dispense ok) | failed/refunded | cancelled | timeout`
