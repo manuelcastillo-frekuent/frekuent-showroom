@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "vite --mode simulator",
+    "dev:services": "vite --mode services",
     "build": "tsc -b && vite build",
+    "build:services": "tsc -b && vite build --mode services",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",

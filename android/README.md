@@ -2,14 +2,14 @@
 
 El APK solo envuelve la web: un `WebView` a pantalla completa. Hay dos variantes, que se pueden instalar a la vez en el mismo dispositivo:
 
-| | **Showroom Offline** | **Showroom Online** |
-| --- | --- | --- |
-| Paquete | `com.frekuent.showroom.offline` | `com.frekuent.showroom.online` |
-| Icono | Isotipo sobre morado oscuro `#27225C` | Isotipo sobre morado `#673FFF` |
-| Web | Va dentro del APK (`../dist`) | https://frekuent-showroom.vercel.app |
-| Red | No la necesita (modo demo) | Necesaria; sin red deja la pantalla en negro y reintenta cada 5 s |
-| Actualizar la web | Recompilar y reinstalar el APK | Redesplegar en Vercel y reabrir la app |
-| Para | Ferias sin red o con red poco fiable | Oficina y sitios con buena red; modo s2s |
+|                   | **Showroom Offline**                  | **Showroom Online**                                               |
+| ----------------- | ------------------------------------- | ----------------------------------------------------------------- |
+| Paquete           | `com.frekuent.showroom.offline`       | `com.frekuent.showroom.online`                                    |
+| Icono             | Isotipo sobre morado oscuro `#27225C` | Isotipo sobre morado `#673FFF`                                    |
+| Web               | Va dentro del APK (`../dist`)         | https://frekuent-showroom.vercel.app                              |
+| Red               | No la necesita (modo demo)            | Necesaria; sin red deja la pantalla en negro y reintenta cada 5 s |
+| Actualizar la web | Recompilar y reinstalar el APK        | Redesplegar en Vercel y reabrir la app                            |
+| Para              | Ferias sin red o con red poco fiable  | Oficina y sitios con buena red; modo s2s                          |
 
 La web empaquetada se sirve desde `https://appassets.androidplatform.net` y no desde `file://`, porque Chromium no carga módulos ES desde `file://`.
 
@@ -33,7 +33,7 @@ La Online apunta a Vercel por defecto. Para otra web, o para el modo s2s:
 
 ## Web en Vercel
 
-Proyecto `frekuent-showroom`, modo demo por defecto. Se sube la build ya hecha, así que lo que cuenta es el `.env` local al hacer `pnpm build`, no las variables de Vercel. El `vercel.json` de la raíz copia las cabeceras de caché de `nginx.conf`.
+Proyecto `frekuent-showroom`, modo demo por defecto. Se sube la build ya hecha, así que lo que cuenta es el modo de la build (`pnpm build`, demo; ver _Entornos_ en el README de la raíz), no las variables de Vercel. El `vercel.json` de la raíz copia las cabeceras de caché de `nginx.conf`.
 
 Redesplegar (con `npx vercel login` hecho una vez). `pnpm build` vacía `dist/`, así que el proyecto se indica por variables de entorno en vez de con `vercel link`; así tampoco se crea un `.env.local` con token dentro de `dist/`:
 
@@ -44,7 +44,7 @@ $env:VERCEL_ORG_ID = "team_gqKu406Tcc9O0nQB7TxFwwNv"; $env:VERCEL_PROJECT_ID = "
 cd dist; npx vercel deploy --prod --yes
 ```
 
-Volver a una versión anterior sin recompilar: `npx vercel rollback` (o *Deployments → Promote* en el panel).
+Volver a una versión anterior sin recompilar: `npx vercel rollback` (o _Deployments → Promote_ en el panel).
 
 ## Instalar en un dispositivo
 

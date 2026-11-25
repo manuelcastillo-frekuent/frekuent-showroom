@@ -5,6 +5,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
 ARG VITE_PAYMENT_MODE=demo
+ARG VITE_API_URL=
 ARG VITE_WS_URL=
 RUN pnpm build
 

@@ -9,12 +9,15 @@ pnpm install
 pnpm dev          # http://localhost:5180
 ```
 
-| Script                      | Qué hace                              |
-| --------------------------- | ------------------------------------- |
-| `pnpm dev`                  | Servidor de desarrollo                |
-| `pnpm build`                | Typecheck + build estática en `dist/` |
-| `pnpm test`                 | Tests (Vitest)                        |
-| `pnpm lint` / `pnpm format` | ESLint / Prettier                     |
+| Script                      | Qué hace                                                       |
+| --------------------------- | -------------------------------------------------------------- |
+| `pnpm dev`                  | Servidor de desarrollo en modo demo                            |
+| `pnpm dev:local`            | Pagos `s2s` contra los servicios simulados (`.env.simulator`)  |
+| `pnpm dev:services`         | Pagos `s2s` contra los endpoints definitivos (`.env.services`) |
+| `pnpm build`                | Typecheck + build estática en `dist/`, en modo demo            |
+| `pnpm build:services`       | Igual, contra los endpoints definitivos                        |
+| `pnpm test`                 | Tests (Vitest)                                                 |
+| `pnpm lint` / `pnpm format` | ESLint / Prettier                                              |
 
 ## Modos
 
@@ -26,9 +29,21 @@ En los dos modos, el botón **«Fail next delivery»** (a la derecha de la máqu
 Probar el modo s2s en local:
 
 ```bash
-cd ../showroom-bff && pnpm start   # terminal 1 → panel en http://localhost:8787
-pnpm dev                           # terminal 2 → http://localhost:5180/?mode=s2s
+cd ../showroom-bff && pnpm dev     # terminal 1 → panel en http://localhost:8787
+pnpm dev:local                     # terminal 2 → http://localhost:5180
 ```
+
+## Entornos (`.env`)
+
+La configuración va por modos de Vite. Los `.env` **no se suben a git**: cada uno crea los suyos en la raíz con las variables de abajo.
+
+| Archivo          | Modo        | Para qué                                                                                            |
+| ---------------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| _(ninguno)_      | por defecto | Demo: pagos simulados en el navegador. Es lo que sale con `pnpm dev` y `pnpm build`                 |
+| `.env.simulator` | `simulator` | Local: `s2s` contra [`../showroom-bff`](../showroom-bff) en `localhost:8787`                        |
+| `.env.services`  | `services`  | Endpoints definitivos. **Por definir**: hoy apunta a hosts `.invalid` y la pantalla queda `offline` |
+
+Variables: `VITE_PAYMENT_MODE` (`demo` | `s2s`), `VITE_API_URL` (servicio de pagos), `VITE_WS_URL` (canal de la máquina) y `VITE_MACHINE_SCALE` (`1` o `0.76`). Los parámetros de URL del kiosco tienen prioridad sobre el archivo. Para un cambio solo en tu equipo, usa `.env.<modo>.local`, que git ignora.
 
 El simulador vive fuera de este repo, en [`../showroom-bff`](../showroom-bff). Mientras no haya endpoints definitivos, hace de servicio de pagos (HTTP), canal de la máquina, firmware y APK. En su panel tú eres el visitante delante del Spot.
 

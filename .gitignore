@@ -14,7 +14,6 @@ coverage/
 # Env (solo se versiona la plantilla)
 .env
 .env.*
-!.env.example
 *.local
 
 # Logs

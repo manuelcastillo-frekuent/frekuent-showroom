@@ -1,3 +1,4 @@
+import { uuid } from '@/shared/utils/uuid';
 import type { PaymentEvent, PaymentGateway, PaymentRequest } from '../../domain/types';
 import type { DispenseOrder, MachineLink } from './machineChannel';
 import type { PaymentsApi } from './paymentsApi';
@@ -52,7 +53,7 @@ export class S2sGateway implements PaymentGateway {
     // Without the channel the dispense order could never arrive: fail up front.
     await this.channel.whenOpen();
     const paymentId = await this.api.createSale({
-      requestId: crypto.randomUUID(),
+      requestId: uuid(),
       spot: request.spot,
       productCode: request.productCode,
       amountCents: request.amountCents,
