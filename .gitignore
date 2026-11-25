@@ -25,8 +25,7 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Android
-android/
+# Android (el detalle está en android/.gitignore)
 *.jks
 *.keystore
 *.apk

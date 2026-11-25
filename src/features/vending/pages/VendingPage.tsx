@@ -1,6 +1,7 @@
 import { MachineCabinet } from '../components/MachineCabinet';
 import { MachineDisplay } from '../components/MachineDisplay';
 import { MachineHeader } from '../components/MachineHeader';
+import { DispenseFlight } from '../components/DispenseFlight';
 import { Keypad } from '../components/Keypad';
 import { PickupTray } from '../components/PickupTray';
 import { ProductGlass } from '../components/ProductGlass';
@@ -26,6 +27,7 @@ export function VendingPage() {
         products={PRODUCTS}
         selectedCode={machine.selected?.code ?? null}
         dropping={machine.dropping}
+        dispensing={machine.dispensing}
       />
       <MachineDisplay code={shownCode(machine.code)} line1={line1} line2={line2} />
       <Keypad onPress={machine.press} />
@@ -38,9 +40,12 @@ export function VendingPage() {
       <PickupTray
         item={machine.dropping ? machine.selected : null}
         delivered={machine.state.status === 'delivered'}
-        onDropEnd={machine.onDropEnd}
         onTake={machine.clear}
       />
+      {/* Last, so the falling product passes over the glass and the tray. */}
+      {machine.dispensing && machine.selected && (
+        <DispenseFlight product={machine.selected} onLand={machine.onDropEnd} />
+      )}
     </MachineCabinet>
   );
 }

@@ -7,12 +7,14 @@ interface ProductGlassProps {
   products: Product[];
   selectedCode: string | null;
   dropping: boolean;
+  dispensing: boolean;
 }
 
 /** Glass front with the 6 × 3 grid of spirals. */
-export function ProductGlass({ products, selectedCode, dropping }: ProductGlassProps) {
+export function ProductGlass({ products, selectedCode, dropping, dispensing }: ProductGlassProps) {
   return (
     <div
+      data-anchor="glass"
       style={{
         ...box(17, 28, 285, 742),
         background: C.glass,
@@ -33,6 +35,7 @@ export function ProductGlass({ products, selectedCode, dropping }: ProductGlassP
             product={p}
             selected={selected}
             dropped={selected && dropping}
+            turning={selected && dispensing}
           />
         );
       })}
