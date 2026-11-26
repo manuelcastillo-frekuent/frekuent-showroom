@@ -1,0 +1,10 @@
+# Vercel builds the web from source with the project's VITE_* variables:
+# only what the build needs goes up, never a local .env.
+.env
+.env.*
+android/
+dist/
+node_modules/
+.claude/
+.idea/
+.codegraph/

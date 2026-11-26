@@ -8,6 +8,7 @@ const FAIL_SHORT: Record<FailReason, string> = {
   timeout: 'Timed out',
   cancelled: 'Cancelled',
   offline: 'Offline',
+  refunded: 'Not completed',
 };
 
 /**

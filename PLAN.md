@@ -47,31 +47,30 @@ Mensaje comercial del prototipo: _"Getting paid is just the beginning"_ y _"Step
 
 ## 2. Arquitectura propuesta
 
-> **Actualizado el 25/11/2026, tras hablar con Ángel:** no hay BFF. La pantalla habla directamente con el servicio de pagos (HTTP) y con el canal de la máquina (WebSocket o MQTT). Los endpoints definitivos aún no existen; hasta entonces, [`../showroom-bff`](../showroom-bff) los simula. Contrato provisional en [docs/s2s-protocol.md](docs/s2s-protocol.md).
+> **Actualizado el 25/11/2026:** no hay BFF. La pantalla cobra directamente con la **Payments API** (QIM-488), solo por HTTP y con polling; se descartan WebSocket y MQTT. Endpoints definitivos, credenciales solo en la APK y errores en [docs/s2s-protocol.md](docs/s2s-protocol.md). [`../showroom-bff`](../showroom-bff) simula el mismo contrato para probar sin el back real.
 
 ```
 ┌──────────────────────────── Tótem ────────────────────────────┐
 │  Pantalla Android (kiosk)                                      │
 │  ┌──────────────────────────────┐                              │
-│  │ Showroom App (web, React)    │── HTTPS: POST /sales ──────┐ │
-│  │  · máquina virtual animada   │── HTTPS: GET status (poll) ┤ │
-│  │  · botón «Fail next delivery»│◄─ dispense ────────────┐   │ │
-│  │                              │── dispense_result ────►│   │ │
-│  └──────────────────────────────┘                        │   │ │
-│   Spot Pro · Spot Compact · Spot Mini (reales)           │   │ │
-└──────────────────────────────────────────────────────────┼───┼─┘
-                                                           │   ▼
-                                  Canal de la máquina ◄────┘  Servicio de pagos (Ángel)
-                                  (WebSocket o MQTT)    ◄───► /dispense, reembolso
-                                                              ◄──► Firmware Spot (Tomás)
+│  │ Showroom App (web, React)    │── POST /create + /pay ─────┐ │
+│  │  · máquina virtual animada   │── GET /{uuid}/status (poll)┤ │
+│  │  · botón «Fail next delivery»│── POST /{uuid}/dispense ───┤ │
+│  └──────────────┬───────────────┘                            │ │
+│   APK: token y peticiones nativas (client_secret solo aquí)  │ │
+│   Spot Pro (real)                                            │ │
+└──────────────────────────────────────────────────────────────┼─┘
+                                                               ▼
+                         auth-service (/clients/token) · Payments API ◄──► Spot Pro
+                                                         completed / refunded
 ```
 
 ### Flujo de compra y entrega
 
-1. `POST /sales`: la respuesta trae el ID del pago (sustituye a `sale_accepted`). Nombre del campo por confirmar.
-2. Polling del estado al servicio de pagos, solo para mostrar el progreso y los fallos: nadie lo envía por su cuenta.
-3. `payment_approved` y `dispense` llegan juntos, en una sola orden, por el canal de la máquina.
-4. `dispense_result` por el mismo canal, y ahí termina el ciclo de la pantalla. Con `false`, el backend reembolsa ese pago por su cuenta; la pantalla no lo consulta.
+1. `POST /create` + `POST /{uuid}/pay {await_dispense: true}`: el Spot muestra el cobro 60 s.
+2. Polling de `GET /{uuid}/status`: es la única forma de enterarse, porque nadie lo envía por su cuenta.
+3. `authorized` = tarjeta aprobada y cargo retenido: es la orden de dispensar.
+4. `POST /{uuid}/dispense {success}`. Con `true` el Spot cobra (`completed`); con `false` lo devuelve (`refunded`).
 
 ### Ideas clave
 

@@ -22,13 +22,15 @@ export type PaymentEvent =
       type: 'dispense';
       paymentId: string;
       productCode: string;
-      authCode: string;
-      method: 'card' | 'wallet';
+      /** The Payments API does not return one; the simulated gateway does. */
+      authCode?: string;
+      method?: 'card' | 'wallet';
     }
   | {
       type: 'failed';
       paymentId: string;
-      reason: 'declined' | 'rejected' | 'timeout' | 'cancelled' | 'offline';
+      /** `refunded`: the charge ended returned before any delivery (nothing was charged). */
+      reason: 'declined' | 'rejected' | 'timeout' | 'cancelled' | 'offline' | 'refunded';
     };
 
 export interface PaymentGateway {

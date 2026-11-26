@@ -47,7 +47,7 @@ export const paymentActions = {
 
   /** Demo mode only: what tapping the physical Spot would do. No-op in s2s. */
   simulateTap() {
-    if (state.status === 'waiting_tap') demoGateway?.simulateTap(state.paymentId);
+    if (state.status === 'waiting_tap') demoGateway.simulateTap(state.paymentId);
   },
 
   async finishDispense(success = true) {

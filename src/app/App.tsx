@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Stage } from '@/shared/stage/Stage';
 import { config } from '@/shared/config/env';
-import { isBusy, usePayment } from '@/features/payments';
+import { isBusy, usePayment, usePaymentMode } from '@/features/payments';
 import { VendingPage } from '@/features/vending';
-import { ConnectionBadge } from './components/ConnectionBadge';
 import { DemoBadge } from './components/DemoBadge';
 import { useIdleReset } from './hooks/useIdleReset';
 
@@ -11,6 +10,7 @@ export function App() {
   // Bumped on idle so the machine remounts and drops any half-typed code.
   const [session, setSession] = useState(0);
   const { state, reset } = usePayment();
+  const mode = usePaymentMode();
 
   const backToStart = useCallback(() => {
     reset();
@@ -25,7 +25,7 @@ export function App() {
       <div key={session} className="fill fade-in">
         <VendingPage />
       </div>
-      {config.paymentMode === 'demo' ? <DemoBadge /> : <ConnectionBadge />}
+      {mode === 'demo' && <DemoBadge />}
     </Stage>
   );
 }

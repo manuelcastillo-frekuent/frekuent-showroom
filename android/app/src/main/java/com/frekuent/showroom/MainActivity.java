@@ -38,6 +38,7 @@ public class MainActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView webView;
+    private ShowroomNative bridge;
     private final Runnable retryLoad = () -> webView.loadUrl(startUrl());
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -70,6 +71,9 @@ public class MainActivity extends Activity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
         webView.setWebViewClient(new KioskClient());
+        // Payments API token and requests for the page, without handing it the secret.
+        bridge = new ShowroomNative(webView, handler, this::startUrl);
+        webView.addJavascriptInterface(bridge, "ShowroomNative");
         setContentView(webView);
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -133,6 +137,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         handler.removeCallbacks(retryLoad);
+        bridge.shutdown();
         webView.destroy();
         super.onDestroy();
     }

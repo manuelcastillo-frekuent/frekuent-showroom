@@ -9,22 +9,22 @@ pnpm install
 pnpm dev          # http://localhost:5180
 ```
 
-| Script                      | Qué hace                                                       |
-| --------------------------- | -------------------------------------------------------------- |
-| `pnpm dev`                  | Servidor de desarrollo en modo demo                            |
-| `pnpm dev:local`            | Pagos `s2s` contra los servicios simulados (`.env.simulator`)  |
-| `pnpm dev:services`         | Pagos `s2s` contra los endpoints definitivos (`.env.services`) |
-| `pnpm build`                | Typecheck + build estática en `dist/`, en modo demo            |
-| `pnpm build:services`       | Igual, contra los endpoints definitivos                        |
-| `pnpm test`                 | Tests (Vitest)                                                 |
-| `pnpm lint` / `pnpm format` | ESLint / Prettier                                              |
+| Script                      | Qué hace                                                      |
+| --------------------------- | ------------------------------------------------------------- |
+| `pnpm dev`                  | Servidor de desarrollo en modo demo                           |
+| `pnpm dev:local`            | Pagos `s2s` contra los servicios simulados (`.env.simulator`) |
+| `pnpm dev:services`         | Pagos `s2s` contra la Payments API real (`.env.services`)     |
+| `pnpm build`                | Typecheck + build estática en `dist/`, en modo demo           |
+| `pnpm build:services`       | Igual, contra los endpoints definitivos                       |
+| `pnpm test`                 | Tests (Vitest)                                                |
+| `pnpm lint` / `pnpm format` | ESLint / Prettier                                             |
 
 ## Modos
 
 - **demo** (por defecto): pagos simulados en el propio navegador (`MockGateway`). En vending se paga tocando el hueco del Spot Pro ("Tap here (demo)"). Es el modo seguro para ferias sin red.
-- **s2s**: pagos reales, sin BFF (`S2sGateway`). La pantalla abre la venta con un `POST` al servicio de pagos y consulta su estado por polling. La **orden de dispensar**, que trae también la aprobación, llega por el canal de la máquina (WebSocket, quizá MQTT). Por ese mismo canal la pantalla confirma la entrega con `dispense_result`. Protocolo provisional en [docs/s2s-protocol.md](docs/s2s-protocol.md).
+- **s2s**: cobro real en el Spot Pro a través de la **Payments API** de Frekuent (`S2sGateway`), sin BFF: `create` + `pay`, polling de `/status` y, cuando llega `authorized`, la entrega y `POST /dispense`. Las credenciales viven en la APK, nunca en la web. Si el Spot no está disponible, la pantalla pasa sola a modo simulado. Contrato y errores en [docs/s2s-protocol.md](docs/s2s-protocol.md).
 
-En los dos modos, el botón **«Fail next delivery»** (a la derecha de la máquina) hace que la siguiente entrega se atasque y que se envíe `dispense_result=false` para probar el reembolso.
+En los dos modos, el botón **«Fail next delivery»** (a la derecha de la máquina) hace que la siguiente entrega se atasque y que se envíe `/dispense` con `success=false` para probar el reembolso.
 
 Probar el modo s2s en local:
 
@@ -37,17 +37,19 @@ pnpm dev:local                     # terminal 2 → http://localhost:5180
 
 La configuración va por modos de Vite. Los `.env` **no se suben a git**: cada uno crea los suyos en la raíz con las variables de abajo.
 
-| Archivo          | Modo        | Para qué                                                                                            |
-| ---------------- | ----------- | --------------------------------------------------------------------------------------------------- |
-| _(ninguno)_      | por defecto | Demo: pagos simulados en el navegador. Es lo que sale con `pnpm dev` y `pnpm build`                 |
-| `.env.simulator` | `simulator` | Local: `s2s` contra [`../showroom-bff`](../showroom-bff) en `localhost:8787`                        |
-| `.env.services`  | `services`  | Endpoints definitivos. **Por definir**: hoy apunta a hosts `.invalid` y la pantalla queda `offline` |
+| Archivo          | Modo        | Para qué                                                                            |
+| ---------------- | ----------- | ----------------------------------------------------------------------------------- |
+| _(ninguno)_      | por defecto | Demo: pagos simulados en el navegador. Es lo que sale con `pnpm dev` y `pnpm build` |
+| `.env.simulator` | `simulator` | Local: `s2s` contra [`../showroom-bff`](../showroom-bff) en `localhost:8787`        |
+| `.env.services`  | `services`  | Payments API real (hoy, el entorno de pruebas por túnel ngrok)                      |
 
-Variables: `VITE_PAYMENT_MODE` (`demo` | `s2s`), `VITE_API_URL` (servicio de pagos), `VITE_WS_URL` (canal de la máquina) y `VITE_MACHINE_SCALE` (`1` o `0.76`). Los parámetros de URL del kiosco tienen prioridad sobre el archivo. Para un cambio solo en tu equipo, usa `.env.<modo>.local`, que git ignora.
+Variables: `VITE_PAYMENT_MODE` (`demo` | `s2s`), `VITE_AUTH_URL`, `VITE_PAYMENTS_URL`, `VITE_DEVICE_SERIAL`, `VITE_POLL_MS`, `VITE_HTTP_VIA` y `VITE_MACHINE_SCALE` (`1` o `0.76`); detalle en [docs/s2s-protocol.md](docs/s2s-protocol.md#configuración). Los parámetros `?mode=` y `?scale=` del kiosco tienen prioridad sobre el archivo.
 
-El simulador vive fuera de este repo, en [`../showroom-bff`](../showroom-bff). Mientras no haya endpoints definitivos, hace de servicio de pagos (HTTP), canal de la máquina, firmware y APK. En su panel tú eres el visitante delante del Spot.
+**Credenciales**: nunca en un `.env` normal ni en Vercel, porque todo lo `VITE_*` acaba en el JavaScript público. En la APK van en `android/local.properties`; para `pnpm dev:*` en tu equipo, `SHOWROOM_DEV_CLIENT_CODE` y `SHOWROOM_DEV_CLIENT_SECRET` en `.env.<modo>.local` (solo el servidor de desarrollo las usa; una build no las incluye).
 
-Parámetros de URL útiles en el kiosco: `?mode=demo|s2s`, `?api=https://…`, `?ws=wss://…`, `?scale=1|0.76`.
+El simulador vive fuera de este repo, en [`../showroom-bff`](../showroom-bff). Mientras no haya endpoints definitivos, hace de servicio de pagos (HTTP), firmware y APK. En su panel tú eres el visitante delante del Spot.
+
+Parámetros de URL útiles en el kiosco: `?mode=demo|s2s`, `?api=https://…`, `?scale=1|0.76`.
 
 ## Estructura
 
@@ -59,7 +61,7 @@ src/
 ├─ features/
 │  ├─ payments/              Un único pago en curso, compartido por todos los escenarios
 │  │  ├─ domain/             types.ts, machine.ts (máquina de estados pura)
-│  │  ├─ api/                gateway.ts (elige mock o s2s), mock/, s2s/ (HTTP + canal de la máquina + protocolo)
+│  │  ├─ api/                gateway.ts (elige mock o s2s), mock/, s2s/ (Payments API: token, HTTP web o nativo, polling, recuperación)
 │  │  ├─ store/              paymentStore.ts (estado + acciones)
 │  │  ├─ hooks/              usePayment
 │  │  └─ index.ts            API pública
@@ -72,7 +74,7 @@ src/
 │     └─ index.ts
 └─ shared/                   Sin lógica de negocio
    ├─ stage/                 Lienzo 2160×3840 escalado al viewport; u() y box()
-   ├─ config/                Flags de entorno (modo, WebSocket, escala)
+   ├─ config/                Flags de entorno (modo, servicio de pagos, escala)
    ├─ utils/                 format.ts
    ├─ styles/                index.css
    └─ assets/                Fuentes

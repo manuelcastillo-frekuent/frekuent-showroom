@@ -1,77 +1,102 @@
-# Protocolo pantalla ↔ servicios (sin BFF)
+# Pantalla ↔ Payments API (QIM-488)
 
-**Estado: PROVISIONAL.** Los endpoints reales aún no están definidos. Mientras tanto, la pantalla habla con el simulador de [`../showroom-bff`](../../showroom-bff), que implementa exactamente este contrato. Fuente de verdad en código: [`src/features/payments/api/s2s/protocol.ts`](../src/features/payments/api/s2s/protocol.ts), con una copia en el simulador. Hay que mantener sincronizados los tres.
+**Estado: endpoints definitivos.** La pantalla de vending cobra en el **Spot Pro** de la pared a través de la Payments API de Frekuent, siguiendo el flujo real de una máquina expendedora: la API avisa de que el pago está aprobado, la pantalla «dispensa» (la animación) y confirma a la API que ha dispensado. La API manda: si algo de aquí no encaja con lo que devuelve, se avisa en vez de adaptar el contrato.
+
+Código: [`src/features/payments/api/s2s/`](../src/features/payments/api/s2s/) (`protocol.ts` es el contrato). El simulador de [`../showroom-bff`](../../showroom-bff) implementa el mismo contrato para desarrollar y probar sin el back real.
 
 ## Con quién habla la pantalla
 
-No hay BFF: la pantalla se conecta directamente a dos cosas.
+| Servicio     | Para qué                                                | Pruebas (túnel ngrok)                                              |
+| ------------ | ------------------------------------------------------- | ------------------------------------------------------------------ |
+| auth-service | `POST /clients/token` y `/clients/token/refresh`        | `https://neatly-movable-mouse.ngrok-free.dev/auth`                 |
+| Payments API | `create`, `pay`, `status`, `dispense`, `cancel`, `list` | `https://neatly-movable-mouse.ngrok-free.dev/payments/v1/external` |
 
-| Canal                               | Para qué                                                                  | Local (simulador)           |
-| ----------------------------------- | ------------------------------------------------------------------------- | --------------------------- |
-| **HTTP al servicio de pagos**       | Abrir la venta, consultar su estado (polling) y cancelarla                | `http://localhost:8787/api` |
-| **Canal de la máquina** (WS o MQTT) | Recibir la orden de dispensar (con la aprobación) y devolver el resultado | `ws://localhost:8787`       |
+Producción: URLs pendientes. En el túnel de pruebas, todas las peticiones llevan `ngrok-skip-browser-warning: 1` (la pantalla y la APK la añaden solas si la URL es de ngrok). El túnel solo está abierto mientras se prueba.
 
-La URL de cada uno se configura con `VITE_API_URL` / `?api=` y con `VITE_WS_URL` / `?ws=`. Importes en **céntimos** (enteros); identificadores como strings.
+Sin callback, MQTT ni WebSocket: la pantalla se entera de todo **preguntando** (`GET /{uuid}/status`), detrás de la interfaz `PaymentStatusSource` por si un día cambia el canal.
 
-## Secuencia
+## Credenciales y CORS
+
+- **El `client_secret` nunca va en el JavaScript de la web ni en el repositorio.** Vive en la APK (`android/local.properties`, ignorado por git → `BuildConfig`). La APK pide y renueva el token y a la web solo le da el `access_token` por el puente `ShowroomNative.getAccessToken`. El puente solo atiende a la página que abrió la propia APK.
+- **CORS:** la Payments API no lo tiene. En pruebas lo añade el túnel ngrok, así que `fetch` desde la WebView funciona; en producción las peticiones van por la parte nativa (`ShowroomNative.request`, solo hacia la URL de pagos configurada en la APK). `VITE_HTTP_VIA` = `auto` (nativo dentro de la APK, `fetch` fuera) · `native` · `fetch`.
+- **Desarrollo local:** con `pnpm dev:*` la página puede pedir el token ella misma con `SHOWROOM_DEV_CLIENT_CODE` / `SHOWROOM_DEV_CLIENT_SECRET` en un `.env.<modo>.local`. `vite.config.ts` solo las inyecta en el servidor de desarrollo: **una build nunca las lleva** (comprobado buscando las credenciales en los bundles).
+- Token cacheado con su caducidad (3600 s) y renovado con menos del 20 % de vida; si el refresh falla, se pide uno nuevo. Un `401·100/101` en pagos renueva **una vez** y repite la llamada.
+
+## Flujo
 
 ```
-Pantalla                         Servicio de pagos            Canal máquina        Spot
-   │ POST /sales ──────────────────► │ ─────────────────────────────────────────► │ pide tarjeta
-   │ ◄──────────── 201 {paymentId}   │                                            │
-   │ GET /payments/{id} (cada 1 s) ► │                                            │
-   │ ◄──── waiting_tap / authorising │ ◄─────────────────────── visitante paga ── │
-   │ ◄──────────────────────────────────────── dispense {aprobación + producto}   │
-   │  (animación: cae el producto, o se atasca)                                   │
-   │ dispense_result {success} ─────────────────────────► │ ─► /dispense          │
-   │  fin del ciclo para la pantalla (con false, el backend reembolsa solo)       │
+Visitante elige producto (toque o código de dos dígitos)
+  Pantalla → API   POST /create  {amount, device_serial, product_description}
+  Pantalla → API   POST /{uuid}/pay  {await_dispense: true}      → el Spot muestra el cobro 60 s
+  Pantalla → API   GET /{uuid}/status  cada 2 s (más lento pasado el primer minuto)
+Visitante acerca la tarjeta
+  API              status = "authorized"   ← cargo retenido: DISPENSA YA
+Pantalla anima la entrega (o el atasco, con «Fail next delivery»)
+  Pantalla → API   POST /{uuid}/dispense  {success}   → 204
+  API              true → "completed" · false → "refunded" (el Spot devuelve el cargo)
+  Pantalla         sigue el cobro en segundo plano hasta completed/refunded (máx. 120 s)
 ```
 
-La pantalla **no dispensa al aprobarse el pago**: espera a la orden `dispense`. El polling solo sirve para mostrar el progreso y detectar los fallos mientras se paga; se detiene al llegar la orden, que trae la aprobación. Con `dispense_result` se cierra el ciclo: la pantalla no vuelve a preguntar por ese pago, tampoco por el reembolso.
+- **Un solo cobro abierto a la vez**: un `/create` espera a que el anterior haya terminado.
+- `⌫` mientras se espera la tarjeta → `POST /cancel {reason: "USER_ABORT"}`. Si ya no se puede cancelar (`409·409`, ya pagó), la venta sigue con el estado real.
+- Si nadie paga en **100 s**, la pantalla cancela con `TIMEOUT`.
+- `/dispense` va **siempre, una vez**, al acabar la animación. Nunca se deja un `authorized` sin informar.
+- El cobro abierto se guarda (`localStorage`: `{uuid, phase}`) para recuperarse de un reinicio.
 
-## HTTP · servicio de pagos
+## Endpoints (contrato exacto)
 
-| Método y ruta                       | Body / respuesta                                                                                                                                                                                                        |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /sales`                       | `{ requestId, spot: pro\|compact\|mini, productCode, amountCents }` → `201 { paymentId }`. `requestId` es un uuid de la pantalla para que reintentar no abra dos pagos. **Nombre del campo `paymentId` por confirmar.** |
-| `GET /payments/{paymentId}`         | → `{ paymentId, status }` (estados abajo)                                                                                                                                                                               |
-| `POST /payments/{paymentId}/cancel` | → `202`. La pantalla sigue esperando hasta que el polling devuelva `cancelled`, porque el visitante puede haber pagado ya                                                                                               |
+Base de pagos con `Authorization: Bearer <token>` y JSON. Importes en **céntimos**. Los errores son `{ error_code, error, message }` y decide `error_code`.
 
-Estados de `status` y qué hace la pantalla:
+| Llamada                                   | Body                                              | 200                                                              |
+| ----------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------- |
+| `POST /create`                            | `{ amount, device_serial, product_description? }` | `{ transaction_uuid, status: pending, status_code }`             |
+| `POST /{uuid}/pay`                        | `{ await_dispense: true }`                        | `{ …, status: in_progress }`                                     |
+| `GET /{uuid}/status`                      | —                                                 | `{ …, device_serial, amount, currency, created_at, updated_at }` |
+| `POST /{uuid}/dispense`                   | `{ success }`                                     | `204` sin cuerpo                                                 |
+| `POST /{uuid}/cancel`                     | `{ reason }`                                      | `{ …, status: cancelled }`                                       |
+| `GET /list?date_from&device_serial&limit` | —                                                 | `{ items, total, limit, offset }`                                |
 
-| `status`                                       | Pantalla                                         |
-| ---------------------------------------------- | ------------------------------------------------ |
-| `waiting_tap`, `authorising`                   | Muestra el progreso                              |
-| `approved`, `completed`                        | Nada: espera la orden por el canal de la máquina |
-| `declined`, `rejected`, `timeout`, `cancelled` | Pago cerrado sin cobro (SaleMessage 3, 1, 2 y 4) |
+Estados: `pending` 100 · `in_progress` 110 · `authorized` 120 · `completed` 200 · `failed` 400 · `cancelled` 410 · `timeout` 420 · `refunded` 430 (los cinco últimos son finales).
 
-Cinco consultas fallidas seguidas dan el pago por perdido (`offline`).
+## Errores y qué hace la pantalla
 
-## Canal de la máquina
+| Situación                                       | Pantalla                                                                     |
+| ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| `/create` → `403·200/201/202/204` o `409·402`   | Pasa a **modo simulado** el resto de la sesión, con la marca «demo»          |
+| `/create` → `409·400 conflict`                  | Recupera el cobro huérfano (abajo) y vuelve a intentarlo una vez             |
+| `/create` sin respuesta                         | Reintenta una vez                                                            |
+| `/pay` sin respuesta                            | `GET /status`: `in_progress` sigue; `pending` reintenta `/pay`               |
+| `/pay` rechazado                                | `POST /cancel {DEVICE_ERROR}` y «Offline»                                    |
+| `/status` falla (red o 5xx)                     | No corta la espera: siguiente ciclo                                          |
+| `/dispense` red, 5xx o `409·410 not_completed`  | Reintenta con el mismo `success` (1 s, 2 s, 4 s)                             |
+| `/dispense` `409·415` / `409·412` / `409·414`   | Ya llegó / ya devuelto / caducado: no reintenta                              |
+| 5xx en cualquier llamada que no sea `/status`   | Reintenta 2 veces (1 s y 3 s)                                                |
+| `failed` / `timeout` / `cancelled` / `refunded` | «Declined» / «Timed out» / «Cancelled» / «Not completed», y vuelta al inicio |
 
-Una conexión persistente por pantalla (hoy WebSocket), abierta al arrancar en modo `s2s`. Si está caída, la venta falla al momento como `offline`, porque la orden de dispensar nunca llegaría.
+**Recuperación al arrancar** (y ante `409·400`): el cobro guardado, o si no hay, `GET /list` de las últimas 24 h de este Spot. `pending`/`in_progress` → `cancel {DEVICE_ERROR}`; `authorized` sin `/dispense` informado → `/dispense {success: false}` (el visitante no vio caer el producto: se le devuelve); final → nada.
 
-| Sentido             | Mensaje                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| servidor → pantalla | `{ type: 'dispense', paymentId, productCode, authCode, method: card\|wallet }`. Sustituye a `payment_approved` + `dispense` |
-| pantalla → servidor | `{ type: 'dispense_result', paymentId, success }`. `false` dispara el reembolso                                             |
+## Modos
 
-El simulador envía cada orden a todas las pantallas y cada una ignora las de pagos que no abrió. El canal real tendrá que dirigirla a la máquina correcta (por ejemplo, un topic MQTT por máquina).
+- **Real** (`VITE_PAYMENT_MODE=s2s`): todo lo anterior.
+- **Simulado** (`demo`, por defecto): el pago simulado de siempre. También se activa solo si el Spot no está disponible (ver errores). Se ve la marca «demo».
+- **Fallo de entrega**: botón «Fail next delivery» a la derecha de la máquina. La siguiente entrega se atasca, se envía `/dispense {success: false}` y la pantalla muestra «Not delivered» y «Refund issued», 5 s cada uno.
 
-Reconexión: espera exponencial de 1 s, 2 s, 4 s… hasta 30 s, con variación aleatoria. Una caída da por fallido (`offline`) el pago que esperaba la orden. Aún no hay heartbeat.
+## Configuración
 
-## Entrega fallida (para probar el reembolso)
+| Variable (`.env.<modo>` o Vercel) | Ejemplo (pruebas)                                                    |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `VITE_PAYMENT_MODE`               | `s2s`                                                                |
+| `VITE_AUTH_URL`                   | `https://neatly-movable-mouse.ngrok-free.dev/auth` (solo `pnpm dev`) |
+| `VITE_PAYMENTS_URL`               | `https://neatly-movable-mouse.ngrok-free.dev/payments/v1/external`   |
+| `VITE_DEVICE_SERIAL`              | `105640` (Spot Pro de pruebas)                                       |
+| `VITE_POLL_MS`                    | `2000` (el brief propone 1000)                                       |
+| `VITE_HTTP_VIA`                   | `auto`                                                               |
 
-A la derecha de la máquina hay un botón **«Fail next delivery»**. No depende de la URL, porque en una pantalla grande puede no haber forma de tocarla. Al activarlo, en la siguiente venta el producto se atasca en la espiral en lugar de caer, la pantalla envía `dispense_result` con `success=false` y muestra «Not delivered / Refund issued». Ahí termina su ciclo: el reembolso lo hace el backend y se comprueba allí. El botón se desactiva solo después de usarse y no se puede cambiar a mitad de una entrega. Funciona igual en modo demo y en `s2s`.
+En la APK (`android/local.properties`): `showroomAuthUrl`, `showroomPaymentsUrl`, `showroomClientCode`, `showroomClientSecret`. La `VITE_PAYMENTS_URL` de la web y `showroomPaymentsUrl` de la APK tienen que coincidir: la APK rechaza peticiones a cualquier otra dirección.
 
-## Preguntas abiertas para backend
+## Pendiente
 
-1. Rutas y nombres de campos reales, en especial el del ID del pago en la respuesta del `POST`.
-2. ¿Qué servicio responde al polling? En los repos locales no hay ningún endpoint de estado de pago S2S.
-3. ¿El canal de la máquina será WebSocket o MQTT? ¿Cómo se dirige la orden a cada pantalla?
-4. Autenticación de la pantalla sin BFF: la credencial queda en el tótem. Propuesta: un token del showroom limitado a sus Spots.
-5. CORS para el origen del tótem.
-6. ¿Quién traduce `spot` → `device_id` ahora que no hay BFF?
-7. ¿Existe `authorising`? payments-api no recibe hoy ningún aviso del tap.
-8. ¿Hay cancelación en el nuevo flujo?
-9. ¿Dónde se comprueba, en el backend, que `dispense_result=false` reembolsó ese pago (prueba de extremo a extremo)?
+- URLs de producción de auth y pagos, y `DEVICE_SERIAL` del Spot definitivo de la pared.
+- CORS en producción: hasta que la API lo active, en la APK las peticiones van por la parte nativa.
+- Precios reales de los productos de la demo.
+- Pruebas de aceptación del brief (§12) contra el entorno de pruebas con el Spot real: **no hechas**; todo está probado contra el simulador.

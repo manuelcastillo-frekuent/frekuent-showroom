@@ -5,8 +5,8 @@ export type FailReason = Extract<PaymentEvent, { type: 'failed' }>['reason'];
 interface Approved {
   request: PaymentRequest;
   paymentId: string;
-  authCode: string;
-  method: 'card' | 'wallet';
+  authCode?: string;
+  method?: 'card' | 'wallet';
 }
 
 export type PaymentState =

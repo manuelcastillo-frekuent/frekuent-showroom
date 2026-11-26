@@ -1,45 +1,113 @@
+import type { TokenProvider } from './auth';
+import type { HttpTransport } from './http';
 import {
-  parseSaleResponse,
-  parseStatusResponse,
-  type SaleRequestBody,
-  type StatusResponse,
+  ApiError,
+  ERR,
+  parseCharge,
+  parseList,
+  toApiError,
+  type CancelReason,
+  type ChargeReply,
+  type CreateBody,
+  type ListReply,
+  type StatusReply,
 } from './protocol';
 
-/** HTTP calls to the payments service; tests pass a fake. */
+/** HTTP calls to the Payments API; tests pass a fake. */
 export interface PaymentsApi {
-  createSale(body: SaleRequestBody): Promise<string>;
-  getStatus(paymentId: string): Promise<StatusResponse>;
-  cancel(paymentId: string): Promise<void>;
+  create(body: CreateBody): Promise<ChargeReply>;
+  pay(uuid: string): Promise<ChargeReply>;
+  status(uuid: string): Promise<StatusReply>;
+  /** 204 on success; errors carry the `error_code` the caller decides on. */
+  dispense(uuid: string, success: boolean): Promise<void>;
+  cancel(uuid: string, reason: CancelReason): Promise<ChargeReply>;
+  list(query: { dateFrom: string; deviceSerial: number; limit?: number }): Promise<ListReply>;
 }
 
-type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+export interface PaymentsApiOptions {
+  transport: HttpTransport;
+  tokens: TokenProvider;
+  baseUrl: string;
+  /** Sent on every request, e.g. `ngrok-skip-browser-warning` in the test environment. */
+  headers?: Record<string, string>;
+  /** Waits before retrying a 5xx on anything but /status (1 s and 3 s, brief §10). */
+  serverErrorRetriesMs?: number[];
+  sleep?: (ms: number) => Promise<void>;
+}
 
-/** Talks straight to the payments service, with no BFF in between. */
-export function createPaymentsApi(
-  baseUrl: string,
-  fetchFn: FetchLike = (url, init) => fetch(url, init),
-): PaymentsApi {
-  const base = baseUrl.replace(/\/$/, '');
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-  async function call(path: string, init?: RequestInit): Promise<unknown> {
-    const response = await fetchFn(`${base}${path}`, {
-      ...init,
-      headers: { 'content-type': 'application/json' },
+export function createPaymentsApi(options: PaymentsApiOptions): PaymentsApi {
+  const { transport, tokens } = options;
+  const base = options.baseUrl.replace(/\/$/, '');
+  const retries = options.serverErrorRetriesMs ?? [1_000, 3_000];
+  const sleep = options.sleep ?? defaultSleep;
+  const charge = (uuid: string) => `/${encodeURIComponent(uuid)}`;
+
+  async function once(method: 'GET' | 'POST', path: string, body?: object, renewed = false) {
+    const token = await tokens.getToken();
+    const reply = await transport.send({
+      method,
+      url: `${base}${path}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        ...options.headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (!response.ok) throw new Error(`${init?.method ?? 'GET'} ${path} → ${response.status}`);
-    return response.status === 204 || response.status === 202 ? null : response.json();
+    if (reply.status >= 200 && reply.status < 300) return reply.body;
+    const error = toApiError(reply.status, reply.body);
+    // An expired or rejected token is renewed once, and the call repeated.
+    if (
+      !renewed &&
+      error.httpStatus === 401 &&
+      (error.errorCode === ERR.tokenInvalid || error.errorCode === ERR.tokenExpired)
+    ) {
+      tokens.invalidate();
+      return once(method, path, body, true);
+    }
+    throw error;
+  }
+
+  /** `/status` is retried by the polling itself; everything else retries its 5xx here. */
+  async function call(method: 'GET' | 'POST', path: string, body?: object, retry5xx = true) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await once(method, path, body);
+      } catch (error) {
+        const is5xx = error instanceof ApiError && error.httpStatus >= 500;
+        if (!retry5xx || !is5xx || attempt >= retries.length) throw error;
+        await sleep(retries[attempt]!);
+      }
+    }
   }
 
   return {
-    async createSale(body) {
-      const data = await call('/sales', { method: 'POST', body: JSON.stringify(body) });
-      return parseSaleResponse(data).paymentId;
+    async create(body) {
+      return parseCharge(await call('POST', '/create', body));
     },
-    async getStatus(paymentId) {
-      return parseStatusResponse(await call(`/payments/${encodeURIComponent(paymentId)}`));
+    async pay(uuid) {
+      return parseCharge(await call('POST', `${charge(uuid)}/pay`, { await_dispense: true }));
     },
-    async cancel(paymentId) {
-      await call(`/payments/${encodeURIComponent(paymentId)}/cancel`, { method: 'POST' });
+    async status(uuid) {
+      return parseCharge(
+        await call('GET', `${charge(uuid)}/status`, undefined, false),
+      ) as StatusReply;
+    },
+    async dispense(uuid, success) {
+      await call('POST', `${charge(uuid)}/dispense`, { success });
+    },
+    async cancel(uuid, reason) {
+      return parseCharge(await call('POST', `${charge(uuid)}/cancel`, { reason }));
+    },
+    async list({ dateFrom, deviceSerial, limit = 20 }) {
+      const q = new URLSearchParams({
+        date_from: dateFrom,
+        device_serial: String(deviceSerial),
+        limit: String(limit),
+      });
+      return parseList(await call('GET', `/list?${q}`));
     },
   };
 }
